@@ -1,0 +1,27 @@
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Backend
+tao-backend/build/
+tao-backend/.gradle/
+tao-backend/gradle/wrapper/gradle-wrapper.jar
+tao-backend/bin/
+tao-backend/out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
