@@ -1,23 +1,29 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Form, Input, Button, Card, Typography, message } from 'antd'
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { register as registerApi } from '@/services/mockServices'
 
 export default function Register() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const [loading, setLoading] = useState(false)
 
-  const onFinish = (values: { username: string; password: string; email?: string }) => {
-    setAuth('mock-token-' + Date.now(), {
-      id: 'user-' + Date.now(),
-      username: values.username,
-      email: values.email,
-      role: 'user',
-    })
-    message.success(t('register.success'))
-    navigate('/', { replace: true })
+  const onFinish = async (values: { username: string; password: string; email?: string }) => {
+    setLoading(true)
+    try {
+      const res = await registerApi(values)
+      setAuth(res.token, res.userInfo)
+      message.success(t('register.success'))
+      navigate('/', { replace: true })
+    } catch {
+      // Error already handled by api interceptor
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

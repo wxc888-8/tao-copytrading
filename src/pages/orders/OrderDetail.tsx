@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Card, Descriptions, Tag, Button, Typography, Empty, Space, message } from 'antd'
+import { Card, Descriptions, Tag, Button, Typography, Empty, Space, message, Spin } from 'antd'
 import { ArrowLeftOutlined, CopyOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { mockOrders } from '@/services/mockData'
-import type { OrderStatus } from '@/types'
+import { fetchOrderDetail } from '@/services/mockServices'
+import type { Order, OrderStatus } from '@/types'
 
 const statusColorMap: Record<OrderStatus, string> = {
   pending: 'default',
@@ -50,8 +50,26 @@ export default function OrderDetail() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [order, setOrder] = useState<Order | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const order = useMemo(() => mockOrders.find((o) => o.id === id), [id])
+  useEffect(() => {
+    if (id) {
+      setLoading(true)
+      fetchOrderDetail(id).then((data) => {
+        setOrder(data as Order)
+        setLoading(false)
+      }).catch(() => setLoading(false))
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    )
+  }
 
   if (!order) {
     return (

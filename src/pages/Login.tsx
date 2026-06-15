@@ -1,23 +1,29 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Form, Input, Button, Card, Typography, message, Divider } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { login as loginApi } from '@/services/mockServices'
 
 export default function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const [loading, setLoading] = useState(false)
 
-  const onFinish = (values: { username: string; password: string }) => {
-    const role = values.username === 'admin' ? 'admin' : 'user'
-    setAuth('mock-token-' + Date.now(), {
-      id: role === 'admin' ? 'admin-1' : 'user-' + Date.now(),
-      username: values.username,
-      role,
-    })
-    message.success(t('login.success'))
-    navigate('/', { replace: true })
+  const onFinish = async (values: { username: string; password: string }) => {
+    setLoading(true)
+    try {
+      const res = await loginApi(values)
+      setAuth(res.token, res.userInfo)
+      message.success(t('login.success'))
+      navigate('/', { replace: true })
+    } catch {
+      // Error already handled by api interceptor
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

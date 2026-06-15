@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Card, Descriptions, Table, Button, Typography, Spin } from 'antd'
+import { Card, Descriptions, Table, Button, Typography, Spin, Tag } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
-import type { LeaderDetail as LeaderDetailType } from '@/services/mockData'
+import type { Leader } from '@/types'
 import { fetchLeaderDetail } from '@/services/mockServices'
 
 export default function LeaderDetail() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [data, setData] = useState<LeaderDetailType | null>(null)
+  const [data, setData] = useState<Leader | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -97,21 +97,23 @@ export default function LeaderDetail() {
           <Descriptions.Item label={t('leader.totalOrders')}>
             {data.totalOrders ?? '-'}
           </Descriptions.Item>
-          <Descriptions.Item label={t('leader.totalStaked')}>
-            {data.totalStaked || '-'}
-          </Descriptions.Item>
+          <Descriptions.Item label="质押总量">-</Descriptions.Item>
         </Descriptions>
       </Card>
 
-      <Typography.Title level={5} style={{ marginBottom: 12 }}>
-        {t('leader.historyOrders')}
-      </Typography.Title>
-      <Table
-        rowKey="id"
-        columns={transactionColumns}
-        dataSource={data.transactions || []}
-        pagination={false}
-      />
+      {data.totalOrders ? (
+        <>
+          <Typography.Title level={5} style={{ marginBottom: 12 }}>
+            {t('leader.historyOrders')}
+          </Typography.Title>
+          <Table
+            rowKey="id"
+            columns={transactionColumns}
+            dataSource={[]}
+            pagination={false}
+          />
+        </>
+      ) : null}
     </div>
   )
 }

@@ -5,9 +5,8 @@ import {
   InputNumber, message, Space,
 } from 'antd'
 import { RollbackOutlined, SwapOutlined } from '@ant-design/icons'
-import type { Position } from '@/types'
-import { fetchPositions } from '@/services/mockServices'
-import { mockAccounts } from '@/services/mockData'
+import type { Position, Account } from '@/types'
+import { fetchPositions, fetchAccounts } from '@/services/mockServices'
 
 const assetTypeLabelMap: Record<string, string> = {
   tao_balance: 'TAO 余额',
@@ -29,20 +28,19 @@ export default function PositionsPage() {
   const [transferModalOpen, setTransferModalOpen] = useState(false)
   const [redeemLoading, setRedeemLoading] = useState(false)
   const [transferLoading, setTransferLoading] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [transferForm] = Form.useForm()
 
-  const loadPositions = async () => {
-    setLoading(true)
-    try {
-      const data = await fetchPositions()
-      setPositions(data)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    loadPositions()
+    setLoading(true)
+    Promise.all([
+      fetchPositions(),
+      fetchAccounts(),
+    ]).then(([pos, accs]) => {
+      setPositions(pos)
+      setAccounts(accs)
+      setLoading(false)
+    })
   }, [])
 
   const handleBatchRedeem = () => {
@@ -231,7 +229,7 @@ export default function PositionsPage() {
             rules={[{ required: true, message: '请选择目标账户' }]}
           >
             <Select placeholder="请选择目标账户">
-              {mockAccounts.map((acc) => (
+              {accounts.map((acc) => (
                 <Select.Option key={acc.id} value={acc.id}>
                   {acc.name} ({acc.id})
                 </Select.Option>

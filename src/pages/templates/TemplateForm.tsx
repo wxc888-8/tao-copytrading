@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   Button, Card, Form, Input, InputNumber, Radio, Space, Switch, message,
 } from 'antd'
-import { mockTemplates } from '@/services/mockData'
+import { fetchTemplate, createTemplate, updateTemplate } from '@/services/mockServices'
 import type { CopyTemplate } from '@/types'
 
 interface FormValues {
@@ -30,31 +30,48 @@ export default function TemplateForm() {
 
   useEffect(() => {
     if (isEdit && id) {
-      const template = mockTemplates.find((item: CopyTemplate) => item.id === id)
-      if (template) {
-        form.setFieldsValue({
-          name: template.name,
-          copyType: template.copyType,
-          copyRatio: template.copyRatio,
-          fixedAmount: template.fixedAmount,
-          dailyLossLimit: template.dailyLossLimit,
-          maxOpsPerDay: template.maxOpsPerDay,
-          slippageTolerance: template.slippageTolerance,
-          stakeRiskThreshold: template.stakeRiskThreshold,
-          status: template.status === 'active',
-        })
-      }
+      fetchTemplate(id).then((template) => {
+        if (template) {
+          form.setFieldsValue({
+            name: template.name,
+            copyType: template.copyType,
+            copyRatio: template.copyRatio,
+            fixedAmount: template.fixedAmount,
+            dailyLossLimit: template.dailyLossLimit,
+            maxOpsPerDay: template.maxOpsPerDay,
+            slippageTolerance: template.slippageTolerance,
+            stakeRiskThreshold: template.stakeRiskThreshold,
+            status: template.status === 'active',
+          })
+        }
+      })
     }
   }, [isEdit, id, form])
 
-  const handleFinish = (values: FormValues) => {
+  const handleFinish = async (values: FormValues) => {
     setLoading(true)
-    console.log('Save template:', values)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const payload = {
+        name: values.name,
+        copyType: values.copyType,
+        copyRatio: values.copyType === 'ratio' ? values.copyRatio : undefined,
+        fixedAmount: values.copyType === 'fixed' ? values.fixedAmount : undefined,
+        dailyLossLimit: values.dailyLossLimit,
+        maxOpsPerDay: values.maxOpsPerDay,
+        slippageTolerance: values.slippageTolerance,
+        stakeRiskThreshold: values.stakeRiskThreshold,
+        status: values.status ? 'active' : 'disabled',
+      } as any
+      if (isEdit && id) {
+        await updateTemplate(id, payload)
+      } else {
+        await createTemplate(payload)
+      }
       message.success(isEdit ? '编辑成功' : '创建成功')
       navigate('/templates')
-    }, 300)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
