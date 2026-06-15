@@ -250,15 +250,21 @@ EOF
 
 log "后端配置完成"
 
-# ─── 8. 构建并启动后端 ────────────────────────────────
+# ─── 8. 安装 Gradle 并构建后端 ──────────────────────────
 echo ""
+info "安装 Gradle 8.5..."
+cd /tmp
+wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O gradle.zip
+unzip -q gradle.zip -d /opt/gradle
+ln -sf /opt/gradle/gradle-8.5/bin/gradle /usr/local/bin/gradle
+gradle --version | head -1
+log "Gradle 安装完成"
+
 info "构建后端..."
 cd "$BACKEND_DIR"
-chmod +x gradlew
-
-./gradlew build -x test -q 2>&1 || {
+gradle build -x test -q 2>&1 || {
     warn "Gradle 构建失败，尝试检查..."
-    ./gradlew build -x test 2>&1 | tail -20
+    gradle build -x test 2>&1 | tail -20
     err "构建失败，请检查上方错误"
     exit 1
 }
