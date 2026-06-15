@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================
-# TAO 跟单系统 - 一键部署脚本 (支持 CentOS/RHEL/OpenCloudOS)
+# TAO 跟单系统 - 一键部署脚本 (支持 Ubuntu / CentOS / RHEL / OpenCloudOS)
 # 用法: bash deploy.sh
 # ==============================================================
 
@@ -30,13 +30,34 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 检测包管理器
-if command -v dnf &>/dev/null; then
-    PKG_MANAGER="dnf"
+# ─── 检测系统 ──────────────────────────────────────────
+IS_DEBIAN=false
+IS_RHEL=false
+PKG_INSTALL=""
+PKG_UPDATE=""
+JAVA_PKG=""
+MYSQL_SERVICE=""
+
+if command -v apt &>/dev/null; then
+    IS_DEBIAN=true
+    PKG_UPDATE="apt update -y"
+    PKG_INSTALL="apt install -y"
+    JAVA_PKG="openjdk-17-jdk"
+    MYSQL_SERVICE="mysql"
+elif command -v dnf &>/dev/null; then
+    IS_RHEL=true
+    PKG_UPDATE="dnf update -y"
+    PKG_INSTALL="dnf install -y"
+    JAVA_PKG="java-17-openjdk-devel"
+    MYSQL_SERVICE="mysqld"
 elif command -v yum &>/dev/null; then
-    PKG_MANAGER="yum"
+    IS_RHEL=true
+    PKG_UPDATE="yum update -y"
+    PKG_INSTALL="yum install -y"
+    JAVA_PKG="java-17-openjdk-devel"
+    MYSQL_SERVICE="mysqld"
 else
-    err "不支持的系统，仅支持 CentOS/RHEL/OpenCloudOS"
+    err "不支持的系统！仅支持 Ubuntu/Debian/CentOS/RHEL/OpenCloudOS"
     exit 1
 fi
 
@@ -49,7 +70,8 @@ echo ""
 
 # ─── 1. 安装基础工具 ────────────────────────────────
 info "安装基础依赖..."
-$PKG_MANAGER install -y wget curl git tar gzip
+$PKG_UPDATE
+$PKG_INSTALL wget curl git tar gzip
 
 # ─── 2. 安装 Java 17 ──────────────────────────────────
 if command -v java &>/dev/null; then
@@ -66,7 +88,7 @@ fi
 
 if [ "$INSTALL_JAVA" = true ]; then
     info "安装 Java 17..."
-    $PKG_MANAGER install -y java-17-openjdk-devel
+    $PKG_INSTALL $JAVA_PKG
     log "Java 17 安装完成"
     java -version
 fi
@@ -75,60 +97,62 @@ fi
 MYSQL_ROOT_PASSWORD=""
 if command -v mysql &>/dev/null; then
     log "MySQL 已安装"
-    read -s -p "请输入 MySQL root 密码: " MYSQL_ROOT_PASSWORD
+    read -s -p "请输入 MySQL root 密码 (留空则使用默认 'Dong001604.'): " MYSQL_ROOT_PASSWORD
     echo ""
+    MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Dong001604.}"
 else
     info "安装 MySQL 8.0..."
     
-    # 检查是否是 OpenCloudOS 8+ 或 CentOS 8+
-    OS_VERSION=$(grep -oP 'VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null | cut -d'.' -f1)
-    
-    if [ -z "$OS_VERSION" ] || [ "$OS_VERSION" -ge 8 ]; then
-        # CentOS 8 / OpenCloudOS 8+
-        rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el8-1.noarch.rpm 2>/dev/null || true
-        rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 2>/dev/null || true
-        $PKG_MANAGER install -y mysql-community-server
+    if [ "$IS_DEBIAN" = true ]; then
+        # Ubuntu/Debian
+        $PKG_INSTALL mysql-server
+        systemctl start mysql
+        systemctl enable mysql
     else
-        # CentOS 7
-        rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm 2>/dev/null || true
-        $PKG_MANAGER install -y mysql-community-server
+        # RHEL/CentOS/OpenCloudOS
+        OS_VERSION=$(grep -oP 'VERSION_ID="\K[^"]+' /etc/os-release 2>/dev/null | cut -d'.' -f1)
+        if [ -z "$OS_VERSION" ] || [ "$OS_VERSION" -ge 8 ]; then
+            rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el8-1.noarch.rpm 2>/dev/null || true
+        else
+            rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm 2>/dev/null || true
+        fi
+        rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 2>/dev/null || true
+        $PKG_INSTALL mysql-community-server
+        systemctl start mysqld
+        systemctl enable mysqld
     fi
     
-    systemctl start mysqld
-    systemctl enable mysqld
-    
-    # 获取临时密码
-    TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log 2>/dev/null | tail -1 | grep -oP 'root@localhost: \K.*')
+    # 获取临时密码（RHEL 系需要）
+    TEMP_PASSWORD=""
+    if [ "$IS_RHEL" = true ]; then
+        TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log 2>/dev/null | tail -1 | grep -oP 'root@localhost: \K.*')
+    fi
     
     if [ -n "$TEMP_PASSWORD" ]; then
         log "MySQL 临时密码: $TEMP_PASSWORD"
         read -p "请输入要设置的新密码 [Dong001604.]: " MYSQL_ROOT_PASSWORD
         MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Dong001604.}"
-        
-        # 修改密码（需符合 MySQL 密码策略）
         mysql -u root -p"$TEMP_PASSWORD" --connect-expired-password <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';
 FLUSH PRIVILEGES;
 EOF
         log "MySQL 密码设置成功"
     else
-        # 可能已经初始化过了，尝试无密码登录
-        if mysqladmin ping -u root --silent 2>/dev/null; then
-            log "MySQL 运行中"
-            read -s -p "请输入 MySQL root 密码: " MYSQL_ROOT_PASSWORD
-            echo ""
-        else
-            err "MySQL 安装可能有问题，请手动检查"
-            exit 1
+        # Ubuntu 或已初始化的系统
+        MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Dong001604.}"
+        
+        # Ubuntu 22.04 用 auth_socket，需要先切换到 mysql_native_password
+        if [ "$IS_DEBIAN" = true ]; then
+            mysql -u root <<EOF
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';
+FLUSH PRIVILEGES;
+EOF
         fi
     fi
 fi
 
-# 如果没有密码，尝试默认密码
-if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
-    warn "未设置 MySQL 密码，尝试空密码登录..."
-    MYSQL_ROOT_PASSWORD="Dong001604."
-fi
+# 确保密码有值
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Dong001604.}"
 
 # 创建数据库
 info "创建数据库..."
@@ -142,7 +166,7 @@ if command -v nginx &>/dev/null; then
     log "Nginx 已安装"
 else
     info "安装 Nginx..."
-    $PKG_MANAGER install -y nginx
+    $PKG_INSTALL nginx
     systemctl start nginx
     systemctl enable nginx
     log "Nginx 安装完成"
@@ -163,8 +187,12 @@ fi
 
 if [ "$INSTALL_NODE" = true ]; then
     info "安装 Node.js 18..."
-    curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
-    $PKG_MANAGER install -y nodejs
+    if [ "$IS_DEBIAN" = true ]; then
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    else
+        curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+    fi
+    $PKG_INSTALL nodejs
     log "Node.js $(node -v) 安装完成"
 fi
 
@@ -188,7 +216,6 @@ log "代码拉取完成"
 echo ""
 info "配置后端..."
 
-# 生成随机 JWT secret
 JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | base64 2>/dev/null || echo "tao-copytrading-jwt-secret-2024")
 
 cat > "$BACKEND_DIR/src/main/resources/application.yml" <<EOF
@@ -229,7 +256,6 @@ info "构建后端..."
 cd "$BACKEND_DIR"
 chmod +x gradlew
 
-# 使用 Gradle Wrapper 构建
 ./gradlew build -x test -q 2>&1 || {
     warn "Gradle 构建失败，尝试检查..."
     ./gradlew build -x test 2>&1 | tail -20
@@ -239,21 +265,15 @@ chmod +x gradlew
 
 JAR_FILE=$(ls build/libs/*.jar 2>/dev/null | head -1)
 if [ -z "$JAR_FILE" ]; then
-    # 尝试找 fat jar
-    JAR_FILE=$(ls build/libs/*.jar 2>/dev/null | head -1)
-fi
-
-if [ -z "$JAR_FILE" ]; then
     err "未找到 JAR 文件"
     exit 1
 fi
 
-info "启动后端服务 (PID 文件: /var/run/tao-backend.pid)..."
+info "启动后端服务..."
 nohup java -jar "$JAR_FILE" > /var/log/tao-backend.log 2>&1 &
 BACKEND_PID=$!
 echo $BACKEND_PID > /var/run/tao-backend.pid
 
-# 等待后端启动
 info "等待后端启动（最多 60 秒）..."
 for i in $(seq 1 30); do
     sleep 2
@@ -287,7 +307,16 @@ info "配置 Nginx..."
 
 SERVER_IP=$(curl -s http://checkip.amazonaws.com 2>/dev/null || curl -s ifconfig.me 2>/dev/null || echo "localhost")
 
-cat > /etc/nginx/conf.d/tao.conf <<EOF
+# Ubuntu Nginx 配置路径不同
+if [ "$IS_DEBIAN" = true ]; then
+    NGINX_CONF="/etc/nginx/sites-available/tao"
+    NGINX_ENABLED="/etc/nginx/sites-enabled/tao"
+else
+    NGINX_CONF="/etc/nginx/conf.d/tao.conf"
+    NGINX_ENABLED="$NGINX_CONF"
+fi
+
+cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;
     server_name $SERVER_IP;
@@ -321,9 +350,14 @@ server {
 }
 EOF
 
-# 移除默认配置
-rm -f /etc/nginx/conf.d/default.conf 2>/dev/null
-rm -f /etc/nginx/conf.d/example.conf 2>/dev/null
+# Ubuntu 需要启用站点
+if [ "$IS_DEBIAN" = true ]; then
+    ln -sf "$NGINX_CONF" "$NGINX_ENABLED"
+    rm -f /etc/nginx/sites-enabled/default
+else
+    rm -f /etc/nginx/conf.d/default.conf 2>/dev/null
+    rm -f /etc/nginx/conf.d/example.conf 2>/dev/null
+fi
 
 nginx -t && systemctl restart nginx
 log "Nginx 配置完成"
@@ -332,10 +366,16 @@ log "Nginx 配置完成"
 echo ""
 info "配置开机自启..."
 
+if [ "$IS_DEBIAN" = true ]; then
+    AFTER_TARGET="network.target mysql.service"
+else
+    AFTER_TARGET="network.target mysqld.service"
+fi
+
 cat > /etc/systemd/system/tao-backend.service <<EOF
 [Unit]
 Description=TAO Copy Trading Backend
-After=network.target mysqld.service
+After=$AFTER_TARGET
 
 [Service]
 Type=simple
