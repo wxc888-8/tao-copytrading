@@ -40,10 +40,6 @@ else
     exit 1
 fi
 
-# 检测是否为 OpenCloudOS（使用 EPOL 而非 EPEL）
-IS_OPENCLOUDOS=false
-grep -qi "opencloudos" /etc/os-release 2>/dev/null && IS_OPENCLOUDOS=true
-
 echo ""
 echo "=============================================="
 echo "    TAO 跟单系统 - 一键部署"
@@ -53,9 +49,6 @@ echo ""
 
 # ─── 1. 安装基础工具 ────────────────────────────────
 info "安装基础依赖..."
-if [ "$IS_OPENCLOUDOS" = false ]; then
-    $PKG_MANAGER install -y epel-release 2>/dev/null || true
-fi
 $PKG_MANAGER install -y wget curl git tar gzip
 
 # ─── 2. 安装 Java 17 ──────────────────────────────────
