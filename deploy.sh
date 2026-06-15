@@ -31,14 +31,18 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 检测包管理器
-if command -v yum &>/dev/null; then
-    PKG_MANAGER="yum"
-elif command -v dnf &>/dev/null; then
+if command -v dnf &>/dev/null; then
     PKG_MANAGER="dnf"
+elif command -v yum &>/dev/null; then
+    PKG_MANAGER="yum"
 else
     err "不支持的系统，仅支持 CentOS/RHEL/OpenCloudOS"
     exit 1
 fi
+
+# 检测是否为 OpenCloudOS（使用 EPOL 而非 EPEL）
+IS_OPENCLOUDOS=false
+grep -qi "opencloudos" /etc/os-release 2>/dev/null && IS_OPENCLOUDOS=true
 
 echo ""
 echo "=============================================="
@@ -47,9 +51,11 @@ echo "    系统: $(cat /etc/os-release 2>/dev/null | head -1 || uname -a)"
 echo "=============================================="
 echo ""
 
-# ─── 1. 安装 EPEL 和基础工具 ──────────────────────────
+# ─── 1. 安装基础工具 ────────────────────────────────
 info "安装基础依赖..."
-$PKG_MANAGER install -y epel-release
+if [ "$IS_OPENCLOUDOS" = false ]; then
+    $PKG_MANAGER install -y epel-release 2>/dev/null || true
+fi
 $PKG_MANAGER install -y wget curl git tar gzip
 
 # ─── 2. 安装 Java 17 ──────────────────────────────────
